@@ -1,8 +1,12 @@
+import os
 import torch
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
 import seaborn as sns
+from PIL import Image
 import matplotlib.pyplot as plt
+from torch.utils.data import Dataset
 from sklearn.metrics import accuracy_score
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader, random_split
@@ -29,87 +33,72 @@ SwinV2_transform = Compose([
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-class CustomDataset_FolderLabels:
+class CustomDataset(Dataset):
     """
-    CustomDataset class for loading and splitting a dataset into training, validation, and testing sets.
+    CustomDataset_CSVlabels is a custom PyTorch dataset class for loading image data and labels
+    from a CSV file.
 
     Args:
-        data_path (str): Path to the main folder containing subfolders for each class.
-        train_ratio (float): Ratio of data allocated for the training set (0.0 to 1.0).
-        val_ratio (float): Ratio of data allocated for the validation set (0.0 to 1.0).
-        test_ratio (float): Ratio of data allocated for the testing set (0.0 to 1.0).
-        batch_size (int): Number of samples per batch in the data loaders.
-        transform (torchvision.transforms.transforms.Compose): Transformations to be applied on the image
+        csv_file (str): The path to the CSV file containing image file names and corresponding labels.
+        img_dir (str): The directory where the image files are located.
+        filename_column (str): The name of the CSV column containing image file names.
+        label_column (str): The name of the CSV column containing image labels.
+        transform (callable, optional): A torchvision.transforms.Compose object that applies image
+            transformations (default: None).
 
     Attributes:
-        train_loader (torch.utils.data.DataLoader): Data loader for the training set.
-        val_loader (torch.utils.data.DataLoader): Data loader for the validation set.
-        test_loader (torch.utils.data.DataLoader): Data loader for the testing set.
+        img_labels (DataFrame): A pandas DataFrame containing image file names and labels.
+        img_dir (str): The directory where the image files are located.
+        transform (callable): A torchvision.transforms.Compose object to apply transformations to images.
 
+    Example:
+        dataset = CustomDataset_CSVlabels(
+            csv_file='labels.csv',
+            img_dir='images/',
+            filename_column='filename',
+            label_column='label',
+            transform=transform
+        )
+
+    This class allows you to create a custom dataset for loading image data and labels from a CSV file
+    and applying optional image transformations during data loading.
     """
-    def __init__(self, data_path, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, batch_size=32, transform=None):
-        self.data_path = data_path
-        self.train_ratio = train_ratio
-        self.val_ratio = val_ratio
-        self.test_ratio = test_ratio
-        self.batch_size = batch_size
-        if transform == None:
-            self.transform = Compose([
-                Resize((224, 224)),
-                ToTensor(),
-                Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-            ])
-        else:
-            self.transform = transform
-        self._load_dataset()
+    def __init__(self,csv_file, img_dir, filename_column, label_column, transform) -> None:
+        super().__init__()
+        self.img_labels = pd.read_csv(csv_file)
+        self.img_dir = img_dir
+        self.transform = transform
+        self.filename = filename_column
+        self.label = label_column
 
-    def _load_dataset(self):
+    def __len__(self):
         """
-        Loads the dataset and splits it into training, validation, and testing sets.
-
-        """
-        dataset = ImageFolder(root=self.data_path, transform=self.transform)
-        num_samples = len(dataset)
-
-        train_size = int(self.train_ratio * num_samples)
-        val_size = int(self.val_ratio * num_samples)
-        test_size = num_samples - train_size - val_size
-
-        self.train_set, self.val_set, self.test_set = random_split(dataset, [train_size, val_size, test_size])
-
-        self.train_loader = DataLoader(self.train_set, batch_size=self.batch_size, shuffle=True)
-        self.val_loader = DataLoader(self.val_set, batch_size=self.batch_size, shuffle=True)
-        self.test_loader = DataLoader(self.test_set, batch_size=self.batch_size, shuffle=True)
-
-    def get_train_loader(self):
-        """
-        Get the data loader for the training set.
+        Get the number of samples in the dataset.
 
         Returns:
-            torch.utils.data.DataLoader: Data loader for the training set.
-
+            int: The number of samples in the dataset.
         """
-        return self.train_loader
-
-    def get_val_loader(self):
+        return len(self.img_labels)
+    
+    def __getitem__(self, index):
         """
-        Get the data loader for the validation set.
+        Get a sample from the dataset by index.
+
+        Args:
+            index (int): The index of the sample to retrieve.
 
         Returns:
-            torch.utils.data.DataLoader: Data loader for the validation set.
-
+            tuple: A tuple containing the transformed image and its corresponding label.
         """
-        return self.val_loader
+        img_path = os.path.join(self.img_dir, self.img_labels.loc[index,self.filename])
+        image = Image.open(img_path)
+        image = image.convert("RGB")
+        y_label = torch.tensor(self.img_labels.loc[index, self.label])
 
-    def get_test_loader(self):
-        """
-        Get the data loader for the testing set.
+        if self.transform:
+            image = self.transform(image)
 
-        Returns:
-            torch.utils.data.DataLoader: Data loader for the testing set.
-
-        """
-        return self.test_loader
+        return (image, y_label)
     
 def TrainLoop(
     model,
@@ -239,6 +228,7 @@ def TrainLoopv2(
     num_epochs:int=20,
     early_stopping_rounds:int=5,
     return_best_model:bool=True,
+    scheduler=None,
     device:str='cpu'
 ):
     """
@@ -283,6 +273,7 @@ def TrainLoopv2(
     for epoch in tqdm(range(num_epochs)):
         model.train()
         print("\nEpoch {}\n----------".format(epoch))
+        print("Learning Rate = {}".format(optimizer.param_groups[0]['lr']))
         train_loss = 0
         for i, (batch, label) in enumerate(train_dataloader):
             batch, label = batch.to(device), label.to(device)
@@ -348,6 +339,11 @@ def TrainLoopv2(
             print(f"Validation Accuracy: {val_accuracy * 100:.2f}%")
 
         total_val_loss.append(validation_loss/len(val_dataloader.dataset))
+
+        try:
+            scheduler.step(validation_loss)
+        except:
+            scheduler.step()
 
         if epochs_without_improvement >= early_stopping_rounds:
             print("Early Stoppping Triggered")
