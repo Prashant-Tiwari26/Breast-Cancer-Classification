@@ -18,6 +18,9 @@ In this project, we use pretrained a pretrained EfficientNet CNN which are finet
 ## Dataset
 
 This [dataset](https://www.kaggle.com/datasets/alovestocode/breast-histopathology-images-modified) is used which is a trimmed down version of the [Janowczyk A, Madabhushi A. Deep learning for digital pathology image analysis: A comprehensive tutorial with selected use cases. J Pathol Inform. 2016 Jul 26;7:29. doi: 10.4103/2153-3539.186902. PMID: 27563488; PMCID: PMC4977982.](https://pubmed.ncbi.nlm.nih.gov/27563488/)
+<br><br>
+Dataset contains 2145 images out of which 1189 have negative diagnosis for cancer and the rest positive.
+
 
 ## Model Architecture
 
@@ -38,6 +41,8 @@ We have taken an EfficientNet V2 small model, the final layer of the model is ch
 The model has **20,178,769 parameters** in total.
 
 ## Preprocessing
+
+The dataset is split into train, test and validation sets containing 70%, 20% and 10% data respectively. Script for it is given in `Scripts/data-split.py`
 
 The following transform is applied to each image:
 ```
