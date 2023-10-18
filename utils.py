@@ -225,10 +225,10 @@ def TrainLoopv2(
     criterion:torch.nn.Module,
     train_dataloader:torch.utils.data.DataLoader,
     val_dataloader:torch.utils.data.DataLoader,
+    scheduler,
     num_epochs:int=20,
     early_stopping_rounds:int=5,
     return_best_model:bool=True,
-    scheduler=None,
     device:str='cpu'
 ):
     """
@@ -336,7 +336,7 @@ def TrainLoopv2(
             print(f"Epochs without Improvement = {epochs_without_improvement}")
 
             print(f"Train Accuracy: {train_accuracy * 100:.2f}%")
-            print(f"Validation Accuracy: {val_accuracy * 100:.2f}%")
+            print(f"Validation Accuracy: {val_accuracy * 100:.2f}%\n")
 
         total_val_loss.append(validation_loss/len(val_dataloader.dataset))
 
